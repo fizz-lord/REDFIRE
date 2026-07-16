@@ -1,0 +1,13 @@
+{
+  "name": "REDFIRE - LLM Red Teaming",
+  "short_name": "REDFIRE",
+  "description": "LLM Red Teaming Platform - Test and evaluate LLM security",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#141414",
+  "theme_color": "#c9673a",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

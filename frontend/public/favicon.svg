@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <defs>
+    <linearGradient id="flame" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#d97a4a"/>
+      <stop offset="50%" stop-color="#c9673a"/>
+      <stop offset="100%" stop-color="#7a4a2e"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#c4983a"/>
+      <stop offset="100%" stop-color="#7a6230"/>
+    </linearGradient>
+  </defs>
+  <!-- Outer glow -->
+  <circle cx="24" cy="24" r="22" fill="#c9673a" opacity="0.15"/>
+  <!-- Flame body -->
+  <path d="M24 6 C24 6 14 18 14 26 C14 32 18 38 24 38 C30 38 34 32 34 26 C34 18 24 6 24 6Z" fill="url(#flame)"/>
+  <!-- Inner flame -->
+  <path d="M24 12 C24 12 18 20 18 26 C18 30 21 34 24 34 C27 34 30 30 30 26 C30 20 24 12 24 12Z" fill="url(#glow)"/>
+  <!-- Core -->
+  <path d="M24 18 C24 18 21 22 21 26 C21 28 22 30 24 30 C26 30 27 28 27 26 C27 22 24 18 24 18Z" fill="#f0d080"/>
+  <!-- Base bar -->
+  <rect x="18" y="38" width="12" height="4" rx="1" fill="#7a4a2e"/>
+</svg>
