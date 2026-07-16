@@ -1,16 +1,50 @@
 # REDFIRE 🔥 — LLM Red Teaming Platform
 
-REDFIRE is an AI red teaming platform for testing LLM safety. It lets you:
+REDFIRE is an open-source AI red teaming platform built for security researchers, penetration testers, and developers who need to evaluate the safety of large language models. It provides a full-featured web application for systematically probing LLMs against the OWASP Top 10 for LLM Applications, automating attack generation, and producing professional audit reports.
 
-- Run **Vuln Scans** (batch attack campaigns) against any LLM target
-- Run **side-by-side comparisons** of multiple models
-- Have **multi-turn conversations** with a target model
-- Run an **automated red team agent** that iteratively attacks the model
-- Attempt **system prompt extraction** with 16+ techniques
-- Generate **professional reports** (HTML / JSON / Markdown / PDF) with false-positive detection
-- Maintain a **human review queue** for verifying results
+## What It Does
 
-> Built for the OWASP LLM Top 10. Works with OpenAI-compatible APIs (NVIDIA, OpenAI, local Ollama, custom endpoints).
+REDFIRE lets you target any LLM — whether it's a cloud-hosted API like NVIDIA or OpenAI, a local model running through Ollama, or any custom OpenAI-compatible endpoint — and test it against a library of 35+ attack prompts across categories like jailbreaking, prompt injection, PII extraction, harmful content generation, and data exfiltration.
+
+The platform works by sending curated attack prompts to the target model, scoring each response on a 0–100 scale, and classifying the result as SAFE, UNCLEAR, JAILBROKEN, or BLOCKED. It uses both rule-based signal detection and an LLM-as-judge to evaluate whether the model was compromised. Every interaction is logged, scored, and available for review.
+
+## Core Features
+
+### Vuln Scan
+Run batch attack campaigns against a target. Select multiple attacks from the library, assign them to a target, and the platform executes them in the background. Each result is scored and classified. Results update in real-time with a status indicator.
+
+### Compare
+Send the same prompt to multiple targets simultaneously and compare responses side by side. Useful for evaluating which models are more resistant to specific attack vectors.
+
+### Conversations
+Multi-turn chat interface with any configured target. Each message is scored automatically. Full conversation history is logged and exportable.
+
+### Auto Agent
+An automated red team agent that runs iterative attack rounds against a target. Each round generates a new attack prompt, sends it to the model, evaluates the response, and uses the result to inform the next round. Configurable by category and number of rounds.
+
+### Extract Prompt
+Attempts to extract the system prompt from a target model using 16+ techniques including direct request, role play, prefix completion, format shifting, token stealing, attention shifting, and recursive prompting. Each technique is tested and scored for extraction confidence.
+
+### Attack Library
+35+ pre-seeded attacks across 7 OWASP LLM categories: jailbreak, prompt injection, harmful content, PII extraction, data extraction, misinformation, and denial of service. Each attack has a severity level (critical/high/medium/low) and relevant MITRE ATLAS and OWASP LLM IDs.
+
+### Reports
+Generate aggregated reports from all platform data — vuln scans, comparisons, conversations, agent runs, extractions, and reviews. Reports include executive summaries, false positive detection, verdict breakdowns, and target details. Export as HTML, JSON, Markdown, or PDF.
+
+### Review Queue
+Maintain a human review queue for verifying automated results. Queue items from any section, assign verdicts (confirmed breach, false positive, uncertain, refusal), and add notes.
+
+### Dashboard
+Visual overview of platform activity with charts showing severity distribution, category breakdowns, and key metrics. Built with Recharts.
+
+## Supported Providers
+
+| Provider | Notes |
+|----------|-------|
+| NVIDIA | OpenAI-compatible API. Choose `custom` provider, set Base URL to `https://integrate.api.nvidia.com/v1/chat/completions` |
+| OpenAI | Native API support |
+| Ollama | Local models via Ollama |
+| Custom | Any OpenAI-compatible endpoint |
 
 ---
 
