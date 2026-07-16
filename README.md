@@ -1,4 +1,4 @@
-# REDFIRE 🔥 — LLM Red Teaming Platform
+# REDFIRE 🔥- LLM Red Teaming Platform
 
 REDFIRE is an open-source AI red teaming platform built for security researchers, penetration testers, and developers who need to evaluate the safety of large language models. It provides a full-featured web application for systematically probing LLMs against the OWASP Top 10 for LLM Applications, automating attack generation, and producing professional audit reports.
 
