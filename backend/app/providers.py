@@ -1,11 +1,57 @@
 """LLM provider integrations for testing."""
 
+import asyncio
+import ipaddress
 import time
+import urllib.parse
 from abc import ABC, abstractmethod
 from typing import Optional
 import httpx
 
 from app.models import ProviderType
+
+
+# ── SSRF Protection ──────────────────────────────────────────────────────
+
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _is_safe_url(url: str) -> bool:
+    """Reject URLs targeting private/loopback/link-local IPs."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname or ""
+        if not hostname:
+            return False
+        ip = ipaddress.ip_address(hostname)
+        return not any(ip in net for net in _BLOCKED_NETWORKS)
+    except ValueError:
+        # hostname is a domain name, not an IP — allow it
+        return True
+
+
+# ── Retry helper ──────────────────────────────────────────────────────────
+
+async def _retry(coro_factory, max_retries: int = 2, base_delay: float = 1.0):
+    """Retry an async call with exponential backoff."""
+    last_exc = None
+    for attempt in range(max_retries + 1):
+        try:
+            return await coro_factory()
+        except (httpx.TransportError, httpx.TimeoutException) as e:
+            last_exc = e
+            if attempt < max_retries:
+                await asyncio.sleep(base_delay * (2 ** attempt))
+    raise last_exc
 
 
 # ── Target Model ABC ──────────────────────────────────────────────────────
@@ -187,6 +233,8 @@ def build_messages(prompt: str | None, **kwargs) -> list[dict]:
 async def call_openai(prompt: str | None, api_key: str, model: str = "gpt-4o", endpoint: str = "https://api.openai.com/v1", **kwargs) -> Optional[str]:
     if not api_key:
         return None
+    if endpoint and not _is_safe_url(endpoint):
+        return "[Error: Blocked — endpoint targets a private/reserved network]"
     try:
         url = endpoint.rstrip("/") + "/chat/completions"
         async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30)) as client:
@@ -258,6 +306,8 @@ async def call_ollama(prompt: str | None, endpoint: str = "http://localhost:1143
 async def call_custom(prompt: str | None, endpoint: str = "", model: str = "default", api_key: str = "", **kwargs) -> Optional[str]:
     if not endpoint:
         return None
+    if not _is_safe_url(endpoint):
+        return "[Error: Blocked — endpoint targets a private/reserved network]"
     try:
         headers = {"Content-Type": "application/json"}
         if api_key:
@@ -303,12 +353,18 @@ async def call_provider(provider_type: ProviderType, prompt: str | None, api_key
     if not fn:
         return None
 
-    if provider_type == ProviderType.OPENAI:
-        return await fn(prompt, api_key, model, endpoint=endpoint or "https://api.openai.com/v1", **kwargs)
-    elif provider_type == ProviderType.ANTHROPIC:
-        return await fn(prompt, api_key, model, **kwargs)
-    elif provider_type == ProviderType.OLLAMA:
-        return await fn(prompt, endpoint or "http://localhost:11434", model, **kwargs)
-    elif provider_type == ProviderType.CUSTOM:
-        return await fn(prompt, endpoint, model, api_key=api_key, **kwargs)
-    return None
+    async def _invoke():
+        if provider_type == ProviderType.OPENAI:
+            return await fn(prompt, api_key, model, endpoint=endpoint or "https://api.openai.com/v1", **kwargs)
+        elif provider_type == ProviderType.ANTHROPIC:
+            return await fn(prompt, api_key, model, **kwargs)
+        elif provider_type == ProviderType.OLLAMA:
+            return await fn(prompt, endpoint or "http://localhost:11434", model, **kwargs)
+        elif provider_type == ProviderType.CUSTOM:
+            return await fn(prompt, endpoint, model, api_key=api_key, **kwargs)
+        return None
+
+    try:
+        return await _retry(_invoke)
+    except Exception as e:
+        return f"[Error: {e}]"

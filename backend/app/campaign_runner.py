@@ -1,6 +1,7 @@
 """Async campaign execution engine with PAIR/TAP, Crescendo, and many-shot attacks."""
 
 import asyncio
+import os
 import time
 import random
 import datetime
@@ -14,6 +15,8 @@ from app.scoring import score_response
 from app.judge import judge_response
 from app.transforms import apply_chain, recommend_transforms
 from app.models import Severity
+
+ATTACKER_MODEL = os.getenv("ATTACKER_MODEL", "gpt-4o-mini")
 
 
 # ── PAIR/TAP mutation prompt ──────────────────────────────────────────────
@@ -181,7 +184,7 @@ async def run_campaign(campaign_id: int, enable_pair: bool = True, max_pair_iter
 
         # Use target's own endpoint as attacker endpoint for simplicity
         attacker_key = api_key
-        attacker_model = "gpt-4o-mini"
+        attacker_model = ATTACKER_MODEL
 
         for ca in campaign.campaign_attacks:
             start_t = time.time()

@@ -1,6 +1,6 @@
 import datetime
 from typing import Optional, Annotated
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic.functional_serializers import PlainSerializer
 
 from app.models import AttackCategory, Severity, ProviderType, CampaignStatus
@@ -16,11 +16,11 @@ UTCDatetime = Annotated[datetime.datetime, PlainSerializer(_with_tz)]
 # ── Target ────────────────────────────────────────────────────────────────
 
 class TargetCreate(BaseModel):
-    name: str
+    name: str = Field(..., max_length=200)
     provider: ProviderType
-    model: str
-    api_key: str = ""
-    endpoint: str = ""
+    model: str = Field(..., max_length=200)
+    api_key: str = Field("", max_length=2000)
+    endpoint: str = Field("", max_length=2000)
     config_json: dict = {}
 
 
@@ -49,13 +49,13 @@ class TargetOut(BaseModel):
 # ── Attack ────────────────────────────────────────────────────────────────
 
 class AttackCreate(BaseModel):
-    prompt: str
+    prompt: str = Field(..., max_length=8000)
     category: AttackCategory
     severity: Severity
-    description: str = ""
+    description: str = Field("", max_length=2000)
     tags: list[str] = []
-    mitre_atlas_id: str = ""
-    owasp_llm_id: str = ""
+    mitre_atlas_id: str = Field("", max_length=100)
+    owasp_llm_id: str = Field("", max_length=100)
 
 
 class AttackUpdate(BaseModel):
@@ -140,7 +140,7 @@ class ResultOut(BaseModel):
 # ── Quick Test (single prompt, no campaign) ───────────────────────────────
 
 class QuickTestRequest(BaseModel):
-    prompt: str
+    prompt: str = Field(..., max_length=8000)
     target_id: int
     category: AttackCategory = AttackCategory.CUSTOM
     severity: Severity = Severity.MEDIUM
@@ -230,7 +230,7 @@ class ConversationOut(BaseModel):
 
 
 class ConversationMessage(BaseModel):
-    content: str
+    content: str = Field(..., max_length=8000)
 
 
 # ── Comparisons ───────────────────────────────────────────────────────────
@@ -263,7 +263,7 @@ class ComparisonOut(BaseModel):
 
 
 class ComparisonCreate(BaseModel):
-    prompt: str
+    prompt: str = Field(..., max_length=8000)
     target_ids: list[int]
 
 
