@@ -106,21 +106,18 @@ async def quick_test(data: QuickTestRequest, db: AsyncSession = Depends(get_db))
     if not target:
         raise HTTPException(404, "Target not found")
 
-    response = await call_provider(
-        target.provider, data.prompt,
-        target.api_key or "", target.model, target.endpoint or "",
-    )
-
-    if not response:
-        raise HTTPException(502, "Provider returned no response")
-
     transform_chain = data.transforms or []
     fired_prompt = data.prompt
     if transform_chain:
         fired_prompt = apply_chain(data.prompt, transform_chain)
-        response = await call_provider(target.provider, fired_prompt, target.api_key or "", target.model, target.endpoint or "")
-        if not response:
-            raise HTTPException(502, "Provider returned no response for transformed prompt")
+
+    response = await call_provider(
+        target.provider, fired_prompt,
+        target.decrypted_api_key or "", target.model, target.endpoint or "",
+    )
+
+    if not response:
+        raise HTTPException(502, "Provider returned no response")
 
     sd = score_response(fired_prompt, response, data.severity)
 

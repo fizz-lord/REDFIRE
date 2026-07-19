@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models import Target
 from app.schemas import TargetCreate, TargetUpdate, TargetOut
+from app.crypto import encrypt_value
 
 router = APIRouter(prefix="/api/targets", tags=["targets"])
 
@@ -17,7 +18,9 @@ async def list_targets(db: AsyncSession = Depends(get_db)):
 
 @router.post("", response_model=TargetOut, status_code=201)
 async def create_target(data: TargetCreate, db: AsyncSession = Depends(get_db)):
-    target = Target(**data.model_dump())
+    payload = data.model_dump()
+    payload["api_key"] = encrypt_value(payload.get("api_key") or "")
+    target = Target(**payload)
     db.add(target)
     await db.commit()
     await db.refresh(target)
@@ -39,7 +42,10 @@ async def update_target(target_id: int, data: TargetUpdate, db: AsyncSession = D
     target = result.scalar_one_or_none()
     if not target:
         raise HTTPException(404, "Target not found")
-    for key, val in data.model_dump(exclude_unset=True).items():
+    payload = data.model_dump(exclude_unset=True)
+    if "api_key" in payload:
+        payload["api_key"] = encrypt_value(payload["api_key"] or "")
+    for key, val in payload.items():
         setattr(target, key, val)
     await db.commit()
     await db.refresh(target)

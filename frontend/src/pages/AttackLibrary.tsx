@@ -8,7 +8,6 @@ const SEVERITIES = ['low', 'medium', 'high', 'critical']
 export default function AttackLibrary() {
   const { addToast } = useToast()
   const [list, setList] = useState<Attack[]>([])
-  const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [seedMsg, setSeedMsg] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -63,10 +62,6 @@ export default function AttackLibrary() {
   }
 
   const cats = [...new Set(list.map(a => a.category))]
-
-  const filtered = filter
-    ? list.filter(a => a.category === filter || a.severity === filter)
-    : list
 
   const severityColor = (s: string) => {
     switch (s) {
@@ -152,7 +147,7 @@ export default function AttackLibrary() {
       )}
 
       <div className="space-y-2">
-        {filtered.map(a => (
+        {list.map(a => (
           <div key={a.id} className="bg-[#1e1e1e] border border-[#333] rounded p-3">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
@@ -168,7 +163,7 @@ export default function AttackLibrary() {
             </div>
           </div>
         ))}
-        {filtered.length === 0 && !loading && (
+        {list.length === 0 && !loading && (
           <div className="text-[#555] text-sm p-4">No attacks match the filter.</div>
         )}
       </div>

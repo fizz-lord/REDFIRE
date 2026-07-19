@@ -69,7 +69,8 @@ async def run_agent(data: AgentRunCreate, db: AsyncSession = Depends(get_db)):
         if not attacker:
             raise HTTPException(404, "Attacker target not found")
 
-    seed = SEED_PROMPTS.get(data.category, SEED_PROMPTS["jailbreak"])
+    category_key = str(data.category)
+    seed = SEED_PROMPTS.get(category_key, SEED_PROMPTS["jailbreak"])
     run = AgentRun(
         target_id=data.target_id,
         attacker_target_id=data.attacker_target_id,
@@ -89,7 +90,7 @@ async def run_agent(data: AgentRunCreate, db: AsyncSession = Depends(get_db)):
             attack_prompt = seed
         else:
             proto = ITERATOR_PROMPT.format(
-                category=data.category,
+                category=category_key,
                 prompt=previous.prompt,
                 response=previous.response[:1000],
                 score=previous.score,
@@ -98,9 +99,9 @@ async def run_agent(data: AgentRunCreate, db: AsyncSession = Depends(get_db)):
                 compliance=previous.compliance_signals,
             )
             if attacker:
-                resp = await _call(attacker.provider, proto, attacker.api_key or "", attacker.model, attacker.endpoint or "")
+                resp = await _call(attacker.provider, proto, attacker.decrypted_api_key or "", attacker.model, attacker.endpoint or "")
             else:
-                resp = await _call(target.provider, proto, target.api_key or "", target.model, target.endpoint or "")
+                resp = await _call(target.provider, proto, target.decrypted_api_key or "", target.model, target.endpoint or "")
 
             if resp and not resp.startswith("[Error:"):
                 attack_prompt = resp.strip()
@@ -109,7 +110,7 @@ async def run_agent(data: AgentRunCreate, db: AsyncSession = Depends(get_db)):
 
         # Run against target
         start = time.time()
-        resp = await _call(target.provider, attack_prompt, target.api_key or "", target.model, target.endpoint or "")
+        resp = await _call(target.provider, attack_prompt, target.decrypted_api_key or "", target.model, target.endpoint or "")
         elapsed = round((time.time() - start) * 1000, 1)
 
         response_text = resp if resp else "[Error: No response]"

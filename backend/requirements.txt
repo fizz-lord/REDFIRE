@@ -9,3 +9,4 @@ pydantic-settings==2.5.0
 aiosqlite==0.20.0
 python-multipart==0.0.12
 fpdf2==2.8.7
+cryptography==44.0.0

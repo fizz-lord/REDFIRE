@@ -176,85 +176,91 @@ async def run_campaign(campaign_id: int, enable_pair: bool = True, max_pair_iter
         campaign.started_at = datetime.datetime.now(datetime.timezone.utc)
         await db.commit()
 
-        target = campaign.target
-        api_key = target.api_key or ""
-        endpoint = target.endpoint or ""
-        provider_type = target.provider
-        model = target.model
+        try:
+            target = campaign.target
+            api_key = target.decrypted_api_key or ""
+            endpoint = target.endpoint or ""
+            provider_type = target.provider
+            model = target.model
 
-        # Use target's own endpoint as attacker endpoint for simplicity
-        attacker_key = api_key
-        attacker_model = ATTACKER_MODEL
+            # Use target's own endpoint as attacker endpoint for simplicity
+            attacker_key = api_key
+            attacker_model = ATTACKER_MODEL
 
-        for ca in campaign.campaign_attacks:
-            start_t = time.time()
-            severity = ca.attack.severity
-            prompt = ca.attack.prompt
+            for ca in campaign.campaign_attacks:
+                start_t = time.time()
+                severity = ca.attack.severity
+                prompt = ca.attack.prompt
 
-            # Try transform-based bypass first
-            transforms = recommend_transforms(prompt, model)
-            transformed_prompt = apply_chain(prompt, transforms)
+                # Try transform-based bypass first
+                transforms = recommend_transforms(prompt, model)
+                transformed_prompt = apply_chain(prompt, transforms)
 
-            best_score = 100
-            best_response = None
-            best_prompt = prompt
-            best_label = "BLOCKED"
-            pair_iterations = 0
+                best_score = -1
+                best_response = None
+                best_prompt = prompt
+                best_label = "ERROR"
+                pair_iterations = 0
+                sd = {}
 
-            # PAIR/TAP loop
-            for iteration in range(max_pair_iterations + 1):
-                iter_start = time.time()
-                current_prompt = transformed_prompt if iteration == 0 else prompt
-                if iteration > 0 and best_label in ("BLOCKED", "PARTIAL_BLOCK"):
-                    current_prompt = await pair_mutate(
-                        current_prompt, best_response or "",
-                        "openai", attacker_key, attacker_model, endpoint,
+                # PAIR/TAP loop
+                for iteration in range(max_pair_iterations + 1):
+                    current_prompt = transformed_prompt if iteration == 0 else prompt
+                    if iteration > 0 and best_label in ("BLOCKED", "PARTIAL_BLOCK"):
+                        current_prompt = await pair_mutate(
+                            current_prompt, best_response or "",
+                            "openai", attacker_key, attacker_model, endpoint,
+                        )
+
+                    response = await call_provider(
+                        provider_type, current_prompt, api_key, model, endpoint,
+                        temperature=0.7 + (iteration * 0.05), max_tokens=1024,
                     )
 
-                response = await call_provider(
-                    provider_type, current_prompt, api_key, model, endpoint,
-                    temperature=0.7 + (iteration * 0.05), max_tokens=1024,
-                )
+                    if not response:
+                        continue
 
-                if not response:
-                    continue
+                    sd = score_response(current_prompt, response, severity)
 
-                sd = score_response(current_prompt, response, severity)
+                    if sd["score"] > best_score:
+                        best_score = sd["score"]
+                        best_response = response
+                        best_prompt = current_prompt
+                        best_label = sd["label"]
 
-                if sd["score"] < best_score:
-                    best_score = sd["score"]
-                    best_response = response
-                    best_prompt = current_prompt
-                    best_label = sd["label"]
+                    pair_iterations = iteration
 
-                pair_iterations = iteration
+                    if sd["label"] == "JAILBROKEN":
+                        break
 
-                if sd["label"] == "JAILBROKEN":
-                    break
+                elapsed_ms = (time.time() - start_t) * 1000
 
-            elapsed_ms = (time.time() - start_t) * 1000
+                if best_response:
+                    result_obj = Result(
+                        campaign_attack_id=ca.id,
+                        response=best_response,
+                        score=best_score,
+                        label=best_label,
+                        refusal_signals=sd.get("refusal_signals", 0),
+                        compliance_signals=sd.get("compliance_signals", 0),
+                        response_time_ms=elapsed_ms,
+                        details=f"PAIR iterations: {pair_iterations}, transforms: {transforms}",
+                    )
+                    db.add(result_obj)
+                    ca.status = "completed"
+                else:
+                    ca.status = "failed"
 
-            if best_response:
-                result_obj = Result(
-                    campaign_attack_id=ca.id,
-                    response=best_response,
-                    score=best_score,
-                    label=best_label,
-                    refusal_signals=sd.get("refusal_signals", 0),
-                    compliance_signals=sd.get("compliance_signals", 0),
-                    response_time_ms=elapsed_ms,
-                    details=f"PAIR iterations: {pair_iterations}, transforms: {transforms}",
-                )
-                db.add(result_obj)
-                ca.status = "completed"
-            else:
-                ca.status = "failed"
+                await db.commit()
 
+            campaign.status = CampaignStatus.COMPLETED
+            campaign.completed_at = datetime.datetime.now(datetime.timezone.utc)
             await db.commit()
-
-        campaign.status = CampaignStatus.COMPLETED
-        campaign.completed_at = datetime.datetime.now(datetime.timezone.utc)
-        await db.commit()
+        except Exception as exc:
+            campaign.status = CampaignStatus.FAILED
+            campaign.completed_at = datetime.datetime.now(datetime.timezone.utc)
+            await db.commit()
+            raise
 
 
 def run_campaign_sync(campaign_id: int, enable_pair: bool = True):

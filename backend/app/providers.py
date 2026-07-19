@@ -2,6 +2,7 @@
 
 import asyncio
 import ipaddress
+import socket
 import time
 import urllib.parse
 from abc import ABC, abstractmethod
@@ -25,18 +26,37 @@ _BLOCKED_NETWORKS = [
 ]
 
 
-def _is_safe_url(url: str) -> bool:
-    """Reject URLs targeting private/loopback/link-local IPs."""
+def _is_safe_url(url: str, allow_private: bool = False) -> bool:
+    """Reject URLs targeting private/loopback/link-local IPs.
+
+    Domain names are resolved and every returned IP is checked.
+    Set ``allow_private=True`` for local-first providers such as Ollama.
+    """
     try:
         parsed = urllib.parse.urlparse(url)
         hostname = parsed.hostname or ""
         if not hostname:
             return False
-        ip = ipaddress.ip_address(hostname)
-        return not any(ip in net for net in _BLOCKED_NETWORKS)
-    except ValueError:
-        # hostname is a domain name, not an IP — allow it
-        return True
+        # Reject unusual schemes
+        if parsed.scheme not in ("http", "https"):
+            return False
+        # Check literal IPs first
+        try:
+            ips = [ipaddress.ip_address(hostname)]
+        except ValueError:
+            # Resolve domain names
+            try:
+                infos = socket.getaddrinfo(hostname, None)
+            except socket.gaierror:
+                return False
+            ips = [ipaddress.ip_address(info[4][0]) for info in infos]
+            if not ips:
+                return False
+        if allow_private:
+            return True
+        return not any(ip in net for ip in ips for net in _BLOCKED_NETWORKS)
+    except Exception:
+        return False
 
 
 # ── Retry helper ──────────────────────────────────────────────────────────
@@ -104,13 +124,13 @@ class CustomTarget(TargetModel):
 
 def target_from_model(target) -> TargetModel:
     if target.provider == ProviderType.OPENAI:
-        return OpenAITarget(target.api_key or "", target.model, target.endpoint or "https://api.openai.com/v1")
+        return OpenAITarget(target.decrypted_api_key or "", target.model, target.endpoint or "https://api.openai.com/v1")
     elif target.provider == ProviderType.ANTHROPIC:
-        return AnthropicTarget(target.api_key or "", target.model)
+        return AnthropicTarget(target.decrypted_api_key or "", target.model)
     elif target.provider == ProviderType.OLLAMA:
         return OllamaTarget(target.endpoint or "http://localhost:11434", target.model)
     else:
-        return CustomTarget(target.endpoint or "", target.model, target.api_key or "")
+        return CustomTarget(target.endpoint or "", target.model, target.decrypted_api_key or "")
 
 
 # ── Strategy Registry ─────────────────────────────────────────────────────
@@ -209,7 +229,7 @@ async def llm_judge(prompt: str, response: str, judge_target=None) -> dict:
 
     judge_prompt = JUDGE_PROMPT.format(prompt=prompt[:500], response=response[:1000])
     resp = await call_provider(
-        judge_target.provider, judge_prompt, judge_target.api_key or "",
+        judge_target.provider, judge_prompt, judge_target.decrypted_api_key or "",
         judge_target.model, judge_target.endpoint or "",
     )
     if resp and not resp.startswith("[Error:"):
@@ -233,11 +253,11 @@ def build_messages(prompt: str | None, **kwargs) -> list[dict]:
 async def call_openai(prompt: str | None, api_key: str, model: str = "gpt-4o", endpoint: str = "https://api.openai.com/v1", **kwargs) -> Optional[str]:
     if not api_key:
         return None
-    if endpoint and not _is_safe_url(endpoint):
+    if endpoint and not _is_safe_url(endpoint, allow_private=False):
         return "[Error: Blocked — endpoint targets a private/reserved network]"
     try:
         url = endpoint.rstrip("/") + "/chat/completions"
-        async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30)) as client:
+        async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30), follow_redirects=False) as client:
             resp = await client.post(
                 url,
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -260,7 +280,7 @@ async def call_anthropic(prompt: str | None, api_key: str, model: str = "claude-
     if not api_key:
         return None
     try:
-        async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30)) as client:
+        async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30), follow_redirects=False) as client:
             resp = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
@@ -283,8 +303,10 @@ async def call_anthropic(prompt: str | None, api_key: str, model: str = "claude-
 
 
 async def call_ollama(prompt: str | None, endpoint: str = "http://localhost:11434", model: str = "llama3", **kwargs) -> Optional[str]:
+    if endpoint and not _is_safe_url(endpoint, allow_private=True):
+        return "[Error: Blocked — Ollama endpoint is not a valid URL]"
     try:
-        async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30)) as client:
+        async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30), follow_redirects=False) as client:
             resp = await client.post(
                 f"{endpoint}/api/chat",
                 json={
@@ -306,7 +328,7 @@ async def call_ollama(prompt: str | None, endpoint: str = "http://localhost:1143
 async def call_custom(prompt: str | None, endpoint: str = "", model: str = "default", api_key: str = "", **kwargs) -> Optional[str]:
     if not endpoint:
         return None
-    if not _is_safe_url(endpoint):
+    if not _is_safe_url(endpoint, allow_private=False):
         return "[Error: Blocked — endpoint targets a private/reserved network]"
     try:
         headers = {"Content-Type": "application/json"}
@@ -315,7 +337,7 @@ async def call_custom(prompt: str | None, endpoint: str = "", model: str = "defa
         custom_headers = kwargs.get("custom_headers", {})
         if isinstance(custom_headers, dict):
             headers.update(custom_headers)
-        async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30)) as client:
+        async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30), follow_redirects=False) as client:
             resp = await client.post(
                 endpoint,
                 headers=headers,

@@ -1,5 +1,6 @@
 import json
 import datetime
+import re
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -11,6 +12,21 @@ from app.schemas import ReportGenerate, ReportOut
 from app.scoring import detect_false_positive
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
+
+_PDF_FONT_FAMILY = "Arial"
+
+
+def _safe_filename(name: str) -> str:
+    """Strip/replace dangerous characters and limit length for Content-Disposition filenames."""
+    if not name:
+        name = "report"
+    # Remove path separators, colon, null bytes, control chars, and traversal patterns
+    sanitized = re.sub(r'[\\/:\x00-\x1f\x7f]', "_", name)
+    sanitized = re.sub(r'\.\.+', "_", sanitized)
+    sanitized = sanitized.strip(". ")
+    if not sanitized:
+        sanitized = "report"
+    return sanitized[:120]
 
 
 @router.post("/generate", response_model=ReportOut, status_code=201)
@@ -214,7 +230,7 @@ async def export_report(report_id: int, format: str = "html", db: AsyncSession =
         return Response(
             content=json.dumps(summary, indent=2, default=str),
             media_type="application/json",
-            headers={"Content-Disposition": f'attachment; filename="{report.name.replace(" ", "_")}.json"'},
+            headers={"Content-Disposition": f'attachment; filename="{_safe_filename(report.name)}.json"'},
         )
 
     # ── Markdown ──────────────────────────────────────────────────────────────
@@ -253,7 +269,7 @@ async def export_report(report_id: int, format: str = "html", db: AsyncSession =
         return Response(
             content=md,
             media_type="text/markdown",
-            headers={"Content-Disposition": f'attachment; filename="{report.name.replace(" ", "_")}.md"'},
+            headers={"Content-Disposition": f'attachment; filename="{_safe_filename(report.name)}.md"'},
         )
 
     # ── PDF ───────────────────────────────────────────────────────────────────
@@ -262,21 +278,25 @@ async def export_report(report_id: int, format: str = "html", db: AsyncSession =
         pdf = FPDF()
         pdf.add_page()
         pdf.set_auto_page_break(auto=True, margin=20)
-        pdf.add_font("Arial", "", r"C:\Windows\Fonts\arial.ttf")
-        pdf.add_font("Arial", "B", r"C:\Windows\Fonts\arialbd.ttf")
-        pdf.set_font("Arial", "B", 22)
+        global _PDF_FONT_FAMILY
+        try:
+            pdf.add_font("Arial", "", r"C:\Windows\Fonts\arial.ttf")
+            pdf.add_font("Arial", "B", r"C:\Windows\Fonts\arialbd.ttf")
+        except Exception:
+            _PDF_FONT_FAMILY = "Helvetica"
+        pdf.set_font(_PDF_FONT_FAMILY, "B", 22)
         pdf.set_text_color(30, 30, 30)
         pdf.cell(0, 14, report.name, new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Arial", "", 9)
+        pdf.set_font(_PDF_FONT_FAMILY, "", 9)
         pdf.set_text_color(100, 100, 100)
         if target:
             pdf.cell(0, 5, target_line, new_x="LMARGIN", new_y="NEXT")
         pdf.cell(0, 5, f"Generated {summary.get('generated_at', '')[:19].replace('T', ' ')}", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(6)
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font(_PDF_FONT_FAMILY, "B", 14)
         pdf.set_text_color(40, 40, 40)
         pdf.cell(0, 10, "Executive Summary", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Arial", "", 10)
+        pdf.set_font(_PDF_FONT_FAMILY, "", 10)
         pdf.set_text_color(50, 50, 50)
         metrics = [
             ("Average Score", str(es.get("avg_score", 0))),
@@ -298,21 +318,21 @@ async def export_report(report_id: int, format: str = "html", db: AsyncSession =
                 x = pdf.get_x()
                 y = pdf.get_y()
                 pdf.rect(x, y, col_w, 14, style="DF")
-                pdf.set_font("Arial", "B", 12)
+                pdf.set_font(_PDF_FONT_FAMILY, "B", 12)
                 pdf.set_text_color(30, 30, 30)
                 pdf.set_xy(x + 3, y + 1)
                 pdf.cell(col_w - 6, 7, val, new_x="RIGHT", new_y="TOP")
-                pdf.set_font("Arial", "", 7)
+                pdf.set_font(_PDF_FONT_FAMILY, "", 7)
                 pdf.set_text_color(80, 80, 80)
                 pdf.set_xy(x + 3, y + 7)
                 pdf.cell(col_w - 6, 5, label, new_x="RIGHT", new_y="TOP")
                 pdf.set_xy(x + col_w, y)
             pdf.ln(15)
         pdf.ln(4)
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font(_PDF_FONT_FAMILY, "B", 14)
         pdf.set_text_color(40, 40, 40)
         pdf.cell(0, 10, "False Positives", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Arial", "", 9)
+        pdf.set_font(_PDF_FONT_FAMILY, "", 9)
         pdf.set_text_color(50, 50, 50)
         fps = summary.get("false_positives", [])
         if fps:
@@ -323,7 +343,7 @@ async def export_report(report_id: int, format: str = "html", db: AsyncSession =
                 y_before = pdf.get_y()
                 pdf.rect(pdf.get_x(), y_before, pdf.w - 20, 18, style="DF")
                 pdf.set_xy(12, y_before + 1)
-                pdf.set_font("Arial", "", 8)
+                pdf.set_font(_PDF_FONT_FAMILY, "", 8)
                 pdf.set_text_color(60, 60, 60)
                 pdf.cell(0, 4, f"{fp['source']} #{fp['id']}  |  {fp['label']}  —  {fp['score']}/100", new_x="LMARGIN", new_y="NEXT")
                 pdf.set_text_color(180, 40, 40)
@@ -334,21 +354,21 @@ async def export_report(report_id: int, format: str = "html", db: AsyncSession =
             pdf.set_text_color(100, 100, 100)
             pdf.cell(0, 8, "No false positives detected.", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font(_PDF_FONT_FAMILY, "B", 14)
         pdf.set_text_color(40, 40, 40)
         pdf.cell(0, 10, "Verdict Summary", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Arial", "", 10)
+        pdf.set_font(_PDF_FONT_FAMILY, "", 10)
         pdf.set_text_color(50, 50, 50)
         for vrd, cnt in es.get("verdict_summary", {}).items():
             pdf.cell(0, 7, f"  {vrd.replace('_', ' ')}: {cnt}", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(10)
-        pdf.set_font("Arial", "", 7)
+        pdf.set_font(_PDF_FONT_FAMILY, "", 7)
         pdf.set_text_color(130, 130, 130)
         pdf.cell(0, 5, "REDFIRE AI Red Teaming Platform", new_x="LMARGIN", new_y="NEXT")
         return Response(
             content=bytes(pdf.output()),
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{report.name.replace(" ", "_")}.pdf"'},
+            headers={"Content-Disposition": f'attachment; filename="{_safe_filename(report.name)}.pdf"'},
         )
 
     # ── HTML (default) ────────────────────────────────────────────────────────
@@ -412,7 +432,7 @@ async def export_report(report_id: int, format: str = "html", db: AsyncSession =
 </body></html>"""
 
     from fastapi.responses import HTMLResponse
-    return HTMLResponse(content=html, headers={"Content-Disposition": f'attachment; filename="{report.name.replace(" ", "_")}.html"'})
+    return HTMLResponse(content=html, headers={"Content-Disposition": f'attachment; filename="{_safe_filename(report.name)}.html"'})
 
 
 @router.delete("/{report_id}", status_code=204)

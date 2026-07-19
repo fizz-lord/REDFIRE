@@ -69,7 +69,7 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie data={sevData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}
-                  labelLine={false} label={({ name, percent }) => `${name.replace(/^(qt_|severity\.)/i, '').trim()} ${(percent * 100).toFixed(0)}%`}>
+                  labelLine={false} label={({ name, percent }: { name?: string; percent?: number }) => `${(name || '').replace(/^(qt_|severity\.)/i, '').trim()} ${((percent || 0) * 100).toFixed(0)}%`}>
                   {sevData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip contentStyle={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: '4px', fontSize: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }} />

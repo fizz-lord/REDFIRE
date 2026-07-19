@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { probes as api, targets as tApi, attacks as aApi } from '../api/client'
 import { useToast } from '../components/Toast'
 import type { Probe, ProbeDetail, Target, Attack } from '../types'
@@ -11,6 +11,7 @@ export default function Probes() {
   const [detail, setDetail] = useState<ProbeDetail | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ name: '', description: '', target_id: 0, attack_ids: [] as number[] })
+  const pollingRef = useRef<{ id: number | null; cancelled: boolean }>({ id: null, cancelled: false })
 
   const load = () => Promise.all([api.list(), tApi.list(), aApi.list()]).then(([p, t, a]) => { setList(p); setTargets(t); setAttacks(a) })
   useEffect(() => { load() }, [])
@@ -29,6 +30,9 @@ export default function Probes() {
   }
 
   const run = async (id: number) => {
+    if (pollingRef.current.id === id) return
+    pollingRef.current.cancelled = true
+    pollingRef.current = { id, cancelled: false }
     try {
       await api.run(id)
       addToast('Vuln scan started', 'success')
@@ -36,8 +40,10 @@ export default function Probes() {
       viewDetail(id)
       for (let i = 0; i < 120; i++) {
         await new Promise(r => setTimeout(r, 3000))
+        if (pollingRef.current.cancelled || pollingRef.current.id !== id) return
         try {
           const updated = await api.get(id)
+          if (pollingRef.current.cancelled || pollingRef.current.id !== id) return
           setDetail(updated)
           if (updated.status !== 'running') {
             addToast('Vuln scan completed', 'success')
@@ -49,8 +55,16 @@ export default function Probes() {
       addToast('Vuln scan timed out', 'error')
     } catch (e) {
       addToast((e as Error).message || 'Failed to start scan', 'error')
+    } finally {
+      if (pollingRef.current.id === id) {
+        pollingRef.current.cancelled = true
+      }
     }
   }
+
+  useEffect(() => {
+    return () => { pollingRef.current.cancelled = true }
+  }, [])
 
   const del = async (id: number) => {
     if (!confirm('Delete this vuln scan and all its results?')) return

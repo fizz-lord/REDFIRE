@@ -1,7 +1,7 @@
 import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
@@ -62,7 +62,15 @@ async def run_probe(probe_id: int, db: AsyncSession = Depends(get_db)):
     probe = result.scalar_one_or_none()
     if not probe:
         raise HTTPException(404, "Probe not found")
-    if probe.status == CampaignStatus.RUNNING:
+
+    # Atomic check-and-set to prevent duplicate runner threads
+    result = await db.execute(
+        update(Campaign)
+        .where(Campaign.id == probe_id, Campaign.status != CampaignStatus.RUNNING)
+        .values(status=CampaignStatus.RUNNING)
+    )
+    await db.commit()
+    if result.rowcount == 0:
         raise HTTPException(400, "Probe already running")
 
     import threading

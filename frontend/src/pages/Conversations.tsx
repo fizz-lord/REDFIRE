@@ -114,7 +114,7 @@ export default function Conversations() {
               {selected.turns.length === 0 && (
                 <div className="text-[#555] text-sm text-center p-4">Send a message to start</div>
               )}
-              {selected.turns.map((turn, i) => (
+              {selected.turns.map((turn) => (
                 <div key={turn.id} className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[80%] rounded p-3 ${
                     turn.role === 'user'

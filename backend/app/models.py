@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 import enum
 
 from app.database import Base
+from app.crypto import decrypt_value
 
 
 class AttackCategory(str, enum.Enum):
@@ -67,6 +68,10 @@ class Target(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.now(datetime.timezone.utc), onupdate=datetime.datetime.now(datetime.timezone.utc))
 
     campaigns = relationship("Campaign", back_populates="target")
+
+    @property
+    def decrypted_api_key(self) -> str:
+        return decrypt_value(self.api_key)
 
 
 class Attack(Base):

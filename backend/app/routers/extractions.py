@@ -67,7 +67,7 @@ async def run_extractions(data: ExtractionRunCreate, db: AsyncSession = Depends(
 
     async def attempt(ep: dict) -> ExtractionResult:
         resp = await call_provider(
-            target.provider, ep["prompt"], target.api_key or "", target.model, target.endpoint or "",
+            target.provider, ep["prompt"], target.decrypted_api_key or "", target.model, target.endpoint or "",
         )
         response_text = resp if resp else "[Error: No response]"
         extracted, confidence = detect_extraction(response_text)

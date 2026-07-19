@@ -25,11 +25,11 @@ class TargetCreate(BaseModel):
 
 
 class TargetUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=200)
     provider: Optional[ProviderType] = None
-    model: Optional[str] = None
-    api_key: Optional[str] = None
-    endpoint: Optional[str] = None
+    model: Optional[str] = Field(None, max_length=200)
+    api_key: Optional[str] = Field(None, max_length=2000)
+    endpoint: Optional[str] = Field(None, max_length=2000)
     config_json: Optional[dict] = None
 
 
@@ -38,7 +38,6 @@ class TargetOut(BaseModel):
     name: str
     provider: ProviderType
     model: str
-    api_key: str = ""
     endpoint: str = ""
     config_json: dict = {}
     created_at: UTCDatetime
@@ -264,7 +263,7 @@ class ComparisonOut(BaseModel):
 
 class ComparisonCreate(BaseModel):
     prompt: str = Field(..., max_length=8000)
-    target_ids: list[int]
+    target_ids: list[int] = Field(..., max_length=20)
 
 
 # ── Extraction (system prompt) ────────────────────────────────────────────
@@ -352,8 +351,8 @@ class AgentRunOut(BaseModel):
 
 class AgentRunCreate(BaseModel):
     target_id: int
-    category: str = "jailbreak"
-    rounds: int = 5
+    category: AttackCategory = AttackCategory.JAILBREAK
+    rounds: int = Field(5, ge=1, le=50)
     attacker_target_id: Optional[int] = None
 
 

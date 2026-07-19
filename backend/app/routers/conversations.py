@@ -74,7 +74,7 @@ async def send_message(conv_id: int, data: ConversationMessage, db: AsyncSession
     messages.append({"role": "user", "content": data.content})
 
     response = await call_provider(
-        target.provider, None, target.api_key or "", target.model, target.endpoint or "",
+        target.provider, None, target.decrypted_api_key or "", target.model, target.endpoint or "",
         messages=messages,
     )
 

@@ -37,7 +37,7 @@ async def run_comparison(data: ComparisonCreate, db: AsyncSession = Depends(get_
     async def run(t: Target):
         start = time.time()
         resp = await call_provider(
-            t.provider, data.prompt, t.api_key or "", t.model, t.endpoint or "",
+            t.provider, data.prompt, t.decrypted_api_key or "", t.model, t.endpoint or "",
         )
         elapsed = round((time.time() - start) * 1000, 1)
 
