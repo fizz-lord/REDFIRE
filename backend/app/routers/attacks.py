@@ -56,7 +56,7 @@ async def seed_builtin_attacks(reseed: bool = False, db: AsyncSession = Depends(
             category=category,
             severity=severity,
             description=desc,
-            tags=[cat.value for cat in [category] if hasattr(cat, 'value')],
+            tags=[category.value],
             mitre_atlas_id=mitre_id,
             owasp_llm_id=owasp_id,
         )
@@ -93,5 +93,7 @@ async def delete_attack(attack_id: int, db: AsyncSession = Depends(get_db)):
     attack = result.scalar_one_or_none()
     if not attack:
         raise HTTPException(404, "Attack not found")
+    # Delete referencing campaign_attacks first to avoid FK constraint errors
+    await db.execute(CampaignAttack.__table__.delete().where(CampaignAttack.attack_id == attack_id))
     await db.delete(attack)
     await db.commit()
