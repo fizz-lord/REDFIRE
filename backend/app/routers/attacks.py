@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.models import Attack, AttackCategory, Severity
+from app.models import Attack, CampaignAttack, AttackCategory, Severity
 from app.schemas import AttackCreate, AttackUpdate, AttackOut
 from app.attack_library import BUILTIN_ATTACKS
 
@@ -43,6 +43,8 @@ async def seed_builtin_attacks(reseed: bool = False, db: AsyncSession = Depends(
             return {"message": "Attacks already seeded. Use reseed=true to reload."}
 
     if reseed:
+        # Delete campaign_attacks first to avoid FK constraint errors
+        await db.execute(CampaignAttack.__table__.delete())
         existing = await db.execute(select(Attack))
         for attack in existing.scalars().all():
             await db.delete(attack)
