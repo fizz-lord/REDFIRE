@@ -275,6 +275,7 @@ class ExtractionResultOut(BaseModel):
     response: str
     extracted: bool
     confidence: float
+    details: str = ""
     created_at: UTCDatetime
 
     model_config = {"from_attributes": True}
